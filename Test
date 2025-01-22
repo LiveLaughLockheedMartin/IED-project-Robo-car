@@ -1,0 +1,245 @@
+#define Trig_Pin1 11 //UL sensor pins
+#define Echo_Pin1 10
+#define Trig_Pin2 8
+#define Echo_Pin2 7 
+
+#define L_motor_fw_pin 3 //Motor driver pin
+#define L_motor_bw_pin 5
+#define R_motor_fw_pin 6
+#define R_motor_bw_pin 9
+
+#define Hit_aPin 4 //define digital I/O pin D4 for Hit A
+#define Hit_bPin 2 //define digital I/O pin D2 for Hit B
+int counterA = 0; //number of hits received from Target board A
+int counterB = 0; //number of hits received from Target board 
+double lastHitA = 0; // Timestamp of last hit on Target A
+double lastHitB = 0; // Timestamp of last hit on Target B
+const double hitDelay = 2000;  // Delay 2 sec
+
+
+
+
+/*#define define Max_Distance 300
+const long threshold=5;*/ //test and adjust
+
+//reverse pins if negative rpm
+//put in analog V_control if uneven rpm
+void fw_Max_V() //spins forward
+{
+  analogWrite(L_motor_fw_pin,180);
+  analogWrite(R_motor_fw_pin,160); //Set forward pin high
+  digitalWrite(L_motor_bw_pin,LOW);
+  digitalWrite(R_motor_bw_pin,LOW); //Set backward pin low
+}
+
+void bw_Max_V(int delay_time) //spins backward
+{
+  digitalWrite(L_motor_fw_pin,LOW);
+  digitalWrite(R_motor_fw_pin,LOW); //Set forward pin low
+  digitalWrite(L_motor_bw_pin,HIGH);
+  digitalWrite(R_motor_bw_pin,HIGH); //Set backward pin High
+  delay(delay_time);
+}
+
+void stop(int delay_time) //Stop motor
+{
+  digitalWrite(L_motor_fw_pin,LOW);
+  digitalWrite(R_motor_fw_pin,LOW); 
+  digitalWrite(L_motor_bw_pin,LOW);
+  digitalWrite(R_motor_bw_pin,LOW);
+  delay(delay_time);
+}
+
+void turn_L(int delay_time) //Turn Left in place 9 o'clock
+{
+  digitalWrite(L_motor_fw_pin,LOW);
+  analogWrite(R_motor_fw_pin,160); 
+  analogWrite(L_motor_bw_pin,120);
+  digitalWrite(R_motor_bw_pin,LOW);
+  delay(delay_time);
+}
+
+void turn_R(int delay_time) //Turn Right in place 3 o'clock
+{
+  digitalWrite(L_motor_fw_pin,HIGH);
+  digitalWrite(R_motor_fw_pin,LOW); 
+  digitalWrite(L_motor_bw_pin,LOW);
+  digitalWrite(R_motor_bw_pin,HIGH);
+  delay(delay_time);
+}
+
+void Accel(int delay_time) //One way road
+{
+  for (int i=0;i<=255;i++) 
+  {
+    analogWrite(L_motor_fw_pin, i);
+    analogWrite(R_motor_fw_pin, i);
+    digitalWrite(L_motor_bw_pin,LOW);
+    digitalWrite(R_motor_bw_pin,LOW);
+    delay(delay_time);
+  }
+}
+
+void Deccel(int delay_time) 
+{
+  for (int i=0;i<=255;i++)
+  {
+    digitalWrite(L_motor_fw_pin,LOW);
+    digitalWrite(R_motor_fw_pin,LOW);
+    analogWrite(L_motor_bw_pin, i);
+    analogWrite(R_motor_bw_pin, i);
+    delay(delay_time);
+  }
+}
+
+void setup() 
+{
+  Serial.begin(9600);
+  //Set pins to input or output
+  pinMode(Trig_Pin1, OUTPUT);
+  pinMode(Echo_Pin1, INPUT);
+  pinMode(Trig_Pin2, OUTPUT);
+  pinMode(Echo_Pin2, INPUT);
+
+  pinMode(L_motor_fw_pin, OUTPUT);
+  pinMode(R_motor_fw_pin, OUTPUT);
+  pinMode(L_motor_bw_pin, OUTPUT);
+  pinMode(R_motor_bw_pin, OUTPUT);
+
+  pinMode(Hit_aPin, INPUT_PULLUP);  // Use INPUT_PULLUP to avoid needing external resistors
+  pinMode(Hit_bPin, INPUT_PULLUP);
+  
+
+
+
+}
+
+void loop()
+ {
+  
+
+  /*digitalWrite(Trig_Pin1,LOW);
+  delayMicroseconds(2);
+  digitalWrite(Trig_Pin1,HIGH);
+  delayMicroseconds(10);
+  digitalWrite(Trig_Pin1,LOW);
+  duration1= pulseIn(Echo_Pin1,HIGH);
+  distance1=duration1/58; //29.1 is speed of sound in cm/ms
+
+  Serial.print("Sensor 1: ");
+  Serial.print(distance1);
+  Serial.print("cm\t");*/
+
+  /*Serial.print("Sensor 2: ");
+  Serial.print(distance2);
+  Serial.print("cm\t");*/
+
+
+
+  /*while (distance1<threshold)
+  {
+    stop(100);
+    turn_L(100); //adjust for -90 degrees
+  }
+  fw_Max_V(500);*/
+
+
+  /*digitalWrite(Trig_Pin2,LOW);
+  delayMicroseconds(0.000001);
+  digitalWrite(Trig_Pin2,HIGH);
+  delayMicroseconds(0.000001);
+  digitalWrite(Trig_Pin2,LOW);
+  duration2= pulseIn(Echo_Pin2,HIGH);
+  distance2=(duration2/2) /29.1;*/
+
+  long pulseDuration1; //variable needed by the ultrasound sensor code
+  int distance1;       // Ultrasound distance in cm
+
+  // this main code runs repeatedly:
+  // 1. Produce a 10us (micro-second) HIGH pulse in Trig to trigger the sensor...
+  digitalWrite(Trig_Pin1, LOW);
+  delayMicroseconds(2);
+  digitalWrite(Trig_Pin1, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(Trig_Pin1, LOW);
+
+  // 2. Use pulseIn() function to measure the duration of the HIGH pulse in Echo 
+  // every 58 us is an obstacle distance of 1 cm
+
+  pulseDuration1 = pulseIn(Echo_Pin1, HIGH);
+  distance1 = pulseDuration1 / 58;  //  Convert to cm
+
+  long pulseDuration2; //variable needed by the ultrasound sensor code
+  int distance2;       // Ultrasound distance in cm
+
+  digitalWrite(Trig_Pin2, LOW);
+  delayMicroseconds(2);
+  digitalWrite(Trig_Pin2, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(Trig_Pin2, LOW);
+
+
+  pulseDuration2 = pulseIn(Echo_Pin2, HIGH);
+  distance2 = pulseDuration2 / 58;  //  Convert to cm
+  
+  if (distance1<40 && distance2<30 || distance1>=799) // Obstacle detection 11 o'clock to 2 o'clock
+  {
+    bw_Max_V(250);
+    turn_L(250); // Adjust the time (in milliseconds) for the turn
+    fw_Max_V(); // Resume forward motion
+  }
+  else if (distance1<40)
+  {
+    bw_Max_V(250);
+    turn_R(250); // Adjust the time (in milliseconds) for the turn
+    fw_Max_V();
+  }
+  else
+  {
+    fw_Max_V();
+  }
+  
+
+  // Display the obstacle distance in serial monitor 
+  Serial.print("Distance = ");
+  Serial.print(distance1);
+  Serial.println(" cm");
+  delay(500);
+
+   double currentMillis = millis(); // uhh this like calculates the time and equating it allows it to reset constantly 
+
+ if (!digitalRead(Hit_bPin)) 
+ { 
+    if (currentMillis - lastHitB >= hitDelay)
+    { // Check if enough time has passed
+      counterB++;
+      lastHitB = currentMillis; // Record the time of the hit
+      //INSERT FUNCTION 1
+      // Serial.print("Target B hit! Count: "); 
+      // Serial.println(counterB);  uses serial monitor 
+    
+    }
+    else 
+    {
+      // Serial.println("Cant Hit Yet/ On Cooldown");  // uhh not needed unless serial monitor 
+    }
+    delay(10); 
+ }
+ else if (!digitalRead(Hit_aPin)) 
+ { // Target A hit
+    if (currentMillis - lastHitA >= hitDelay) 
+    { // Check if enough time has passed
+      counterA++;
+      lastHitA = currentMillis; // Record the time of the hit
+      // INSERT FUNCTION 2 
+      //Serial.print("Target A hit! Count: ");
+      //Serial.println(counterA);
+    }
+    else 
+    {
+      // Serial.println("Cant Hit Yet/ On Cooldown"); 
+    }
+    delay(10); 
+ }
+
+}
