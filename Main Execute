@@ -170,7 +170,7 @@ void loop()
   pulseDuration2 = pulseIn(Echo_Pin2, HIGH);
   distance2 = pulseDuration2 / 58;  //  Convert to cm
   
-  if (distance1<40 && distance2<30) // Obstacle detection 11 o'clock to 2 o'clock
+  if (distance1<40 && distance2<30 || distance1>=799) // Obstacle detection 11 o'clock to 2 o'clock
   {
     bw_Max_V(250);
     turn_L(250); // Adjust the time (in milliseconds) for the turn
