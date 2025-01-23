@@ -1,0 +1,205 @@
+#include <ArduinoWiFiServer.h>
+#include <BearSSLHelpers.h>
+#include <CertStoreBearSSL.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266WiFiAP.h>
+#include <ESP8266WiFiGeneric.h>
+#include <ESP8266WiFiGratuitous.h>
+#include <ESP8266WiFiMulti.h>
+#include <ESP8266WiFiSTA.h>
+#include <ESP8266WiFiScan.h>
+#include <ESP8266WiFiType.h>
+#include <WiFiClient.h>
+#include <WiFiClientSecure.h>
+#include <WiFiClientSecureBearSSL.h>
+#include <WiFiServer.h>
+#include <WiFiServerSecure.h>
+#include <WiFiServerSecureBearSSL.h>
+#include <WiFiUdp.h>
+
+// Include necessary libraries for Wi-Fi and Blynk
+#define BLYNK_PRINT Serial
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+
+// Motor pins (shared between obstacle avoidance and Blynk control)
+#define L_motor_fw_pin 3
+#define L_motor_bw_pin 5
+#define R_motor_fw_pin 6
+#define R_motor_bw_pin 9
+
+// Ultrasonic sensor pins
+#define Trig_Pin1 11
+#define Echo_Pin1 10
+#define Trig_Pin2 8
+#define Echo_Pin2 7
+
+// Blynk parameters
+char auth[] = "TaFl8pswQSPnCG2lrR7kgp1Q_QT-qH0E"; // Enter your Blynk auth token
+char ssid[] = "LJ"; // Enter your Wi-Fi SSID
+char pass[] = "12345678"; // Enter your Wi-Fi password
+
+// Variables for Blynk joystick control
+int x = 50;
+int y = 50;
+int Speed;
+
+// Variables for ultrasonic sensors
+long pulseDuration1;
+int distance1;
+long pulseDuration2;
+int distance2;
+
+void setup() {
+  Serial.begin(9600);
+  
+  // Set motor pins as output
+  pinMode(L_motor_fw_pin, OUTPUT);
+  pinMode(R_motor_fw_pin, OUTPUT);
+  pinMode(L_motor_bw_pin, OUTPUT);
+  pinMode(R_motor_bw_pin, OUTPUT);
+
+  // Set ultrasonic sensor pins as input/output
+  pinMode(Trig_Pin1, OUTPUT);
+  pinMode(Echo_Pin1, INPUT);
+  pinMode(Trig_Pin2, OUTPUT);
+  pinMode(Echo_Pin2, INPUT);
+
+  // Initialize Blynk
+  Blynk.begin(auth, ssid, pass, "blynk.cloud", 80);
+}
+
+// Get joystick values from Blynk
+BLYNK_WRITE(V0) {
+  x = param[0].asInt();
+}
+
+BLYNK_WRITE(V1) {
+  y = param[0].asInt();
+}
+
+BLYNK_WRITE(V2) {
+  Speed = param.asInt();
+}
+
+// Main function to control the car
+void smartcar() {
+  // Obstacle detection logic
+  digitalWrite(Trig_Pin1, LOW);
+  delayMicroseconds(2);
+  digitalWrite(Trig_Pin1, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(Trig_Pin1, LOW);
+  pulseDuration1 = pulseIn(Echo_Pin1, HIGH);
+  distance1 = pulseDuration1 / 58; // Convert to cm
+
+  digitalWrite(Trig_Pin2, LOW);
+  delayMicroseconds(2);
+  digitalWrite(Trig_Pin2, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(Trig_Pin2, LOW);
+  pulseDuration2 = pulseIn(Echo_Pin2, HIGH);
+  distance2 = pulseDuration2 / 58; // Convert to cm
+
+  // Check if obstacle is detected (adjust threshold as needed)
+  if (distance1 < 40 && distance2 < 30 || distance1 >= 799) {
+    bw_Max_V(250); // Move backward to avoid obstacle
+    turn_L(250);   // Turn left to avoid obstacle
+    fw_Max_V();    // Resume forward motion after turn
+  } else if (distance1 < 40) {
+    bw_Max_V(250); // Move backward to avoid obstacle
+    turn_R(250);   // Turn right to avoid obstacle
+    fw_Max_V();    // Resume forward motion after turn
+  } else {
+    // Handle the joystick control if no obstacle is detected
+    if (y > 70) {
+      carForward();
+      Serial.println("carForward");
+    } else if (y < 30) {
+      carBackward();
+      Serial.println("carBackward");
+    } else if (x < 30) {
+      carLeft();
+      Serial.println("carLeft");
+    } else if (x > 70) {
+      carRight();
+      Serial.println("carRight");
+    } else if (x < 70 && x > 30 && y < 70 && y > 30) {
+      carStop();
+      Serial.println("carStop");
+    }
+  }
+}
+
+void loop() {
+  Blynk.run(); // Run the Blynk functions
+  smartcar();  // Call the main function to control the car
+}
+
+// Motor control functions for NodeMCU with Blynk
+void carForward() {
+  analogWrite(L_motor_fw_pin, Speed);
+  analogWrite(R_motor_fw_pin, Speed);
+  digitalWrite(L_motor_bw_pin, LOW);
+  digitalWrite(R_motor_bw_pin, LOW);
+}
+
+void carBackward() {
+  analogWrite(L_motor_fw_pin, LOW);
+  analogWrite(R_motor_fw_pin, LOW);
+  digitalWrite(L_motor_bw_pin, HIGH);
+  digitalWrite(R_motor_bw_pin, HIGH);
+}
+
+void carLeft() {
+  analogWrite(L_motor_fw_pin, Speed);
+  analogWrite(R_motor_fw_pin, Speed);
+  digitalWrite(L_motor_bw_pin, LOW);
+  digitalWrite(R_motor_bw_pin, HIGH);
+}
+
+void carRight() {
+  analogWrite(L_motor_fw_pin, Speed);
+  analogWrite(R_motor_fw_pin, Speed);
+  digitalWrite(L_motor_bw_pin, HIGH);
+  digitalWrite(R_motor_bw_pin, LOW);
+}
+
+void carStop() {
+  digitalWrite(L_motor_fw_pin, LOW);
+  digitalWrite(R_motor_fw_pin, LOW);
+  digitalWrite(L_motor_bw_pin, LOW);
+  digitalWrite(R_motor_bw_pin, LOW);
+}
+
+// Motor control functions for regular motor driver (obstacle avoidance)
+void fw_Max_V() {
+  analogWrite(L_motor_fw_pin, 180);
+  analogWrite(R_motor_fw_pin, 160); // Set forward pin high
+  digitalWrite(L_motor_bw_pin, LOW);
+  digitalWrite(R_motor_bw_pin, LOW); // Set backward pin low
+}
+
+void bw_Max_V(int delay_time) {
+  digitalWrite(L_motor_fw_pin, LOW);
+  digitalWrite(R_motor_fw_pin, LOW); // Set forward pin low
+  digitalWrite(L_motor_bw_pin, HIGH);
+  digitalWrite(R_motor_bw_pin, HIGH); // Set backward pin High
+  delay(delay_time);
+}
+
+void turn_L(int delay_time) {
+  digitalWrite(L_motor_fw_pin, LOW);
+  analogWrite(R_motor_fw_pin, 160);
+  analogWrite(L_motor_bw_pin, 120);
+  digitalWrite(R_motor_bw_pin, LOW);
+  delay(delay_time);
+}
+
+void turn_R(int delay_time) {
+  digitalWrite(L_motor_fw_pin, HIGH);
+  digitalWrite(R_motor_fw_pin, LOW);
+  digitalWrite(L_motor_bw_pin, LOW);
+  digitalWrite(R_motor_bw_pin, HIGH);
+  delay(delay_time);
+}
