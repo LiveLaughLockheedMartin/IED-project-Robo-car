@@ -1,0 +1,331 @@
+#include <avr/interrupt.h>
+#include <SoftwareSerial.h>
+
+#define Trig_Pin1 11  // UL sensor pins
+#define Echo_Pin1 10
+#define Trig_Pin2 8
+#define Echo_Pin2 7
+
+#define L_motor_fw_pin 3  // Motor driver pin
+#define L_motor_bw_pin 5
+#define R_motor_fw_pin 6
+#define R_motor_bw_pin 9
+
+#define Hit_aPin 4  // Define digital I/O pin D4 for Hit A
+#define Hit_bPin 2  // Define digital I/O pin D2 for Hit B
+
+volatile int counterA = 0;  // Number of hits received from Target board A (volatile for ISR)
+volatile int counterB = 0;  // Number of hits received from Target board B (volatile for ISR)
+double lastHitA = 0;      // Timestamp of last hit on Target A
+double lastHitB = 0;      // Timestamp of last hit on Target B
+const double hitDelay = 2000; // Delay 2 sec
+
+
+// ESP-01 Communication setup
+#define ESP_RX 2 // RX pin of ESP8266 connected to digital pin 2 on arduino
+#define ESP_TX 3 // TX pin of ESP8266 connected to digital pin 3 on arduino
+SoftwareSerial espSerial(ESP_RX, ESP_TX);
+
+// ThingSpeak Parameters (Replace with your channel details)
+const char* thingspeakChannelID = "YOUR_THINGSPEAK_CHANNEL_ID";  // Replace with your ThingSpeak channel ID
+const char* thingspeakAPIKey = "YOUR_THINGSPEAK_API_KEY";  // Replace with your ThingSpeak API key
+String command = "stop";   // Stores the current command read from ThingSpeak
+bool carRunning = false;  // Flag to track if car is running
+unsigned long lastReadTime = 0; // Last time we read from ThingSpeak
+const unsigned long readInterval = 3000; //Read interval from thingspeak
+
+// Function Prototypes (for clarity)
+void fw_Max_V();
+void bw_Max_V(int delay_time);
+void stop(int delay_time);
+void turn_L(int delay_time);
+void turn_R(int delay_time);
+void Accel(int delay_time);
+void Deccel(int delay_time);
+void espSendCmd(const char *cmd);
+String espReadResponse(int timeout);
+void thingspeakReadCommand();
+
+void setup() {
+  Serial.begin(9600);
+
+  // Set pins to input or output
+  pinMode(Trig_Pin1, OUTPUT);
+  pinMode(Echo_Pin1, INPUT);
+  pinMode(Trig_Pin2, OUTPUT);
+  pinMode(Echo_Pin2, INPUT);
+
+  pinMode(L_motor_fw_pin, OUTPUT);
+  pinMode(R_motor_fw_pin, OUTPUT);
+  pinMode(L_motor_bw_pin, OUTPUT);
+  pinMode(R_motor_bw_pin, OUTPUT);
+
+  pinMode(Hit_aPin, INPUT_PULLUP);  // Use INPUT_PULLUP to avoid needing external resistors
+  pinMode(Hit_bPin, INPUT_PULLUP);
+
+  // Enable Pin Change Interrupt for Hit_aPin
+  PCICR |= (1 << PCIE2);  // Enable PCIE2 (Pin Change Interrupt Enable for PCINT[23:16] which includes PD ports)
+  PCMSK2 |= (1 << PCINT20);  // Enable interrupt on PCINT20 (which is digital pin 4)
+
+
+  // ESP-01 setup
+  espSerial.begin(115200); //ESP-01 default baud rate
+  delay(1000);
+  Serial.println("Initialising ESP8266");
+  espSendCmd("AT");
+  espReadResponse(2000);
+  espSendCmd("AT+CWMODE=1"); // Set ESP to station mode
+  espReadResponse(2000);
+
+   // Connect to your Wi-Fi
+  espSendCmd("AT+CWJAP=\"YOUR_WIFI_SSID\",\"YOUR_WIFI_PASSWORD\""); //replace with your wifi name and password
+  espReadResponse(5000);
+  Serial.println("ESP connected to Wifi");
+
+   
+}
+
+void loop() {
+    // Ultrasonic Sensor Readings
+    long pulseDuration1;
+    int distance1;
+
+    digitalWrite(Trig_Pin1, LOW);
+    delayMicroseconds(2);
+    digitalWrite(Trig_Pin1, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(Trig_Pin1, LOW);
+    pulseDuration1 = pulseIn(Echo_Pin1, HIGH);
+    distance1 = pulseDuration1 / 58;
+
+    long pulseDuration2;
+    int distance2;
+    digitalWrite(Trig_Pin2, LOW);
+    delayMicroseconds(2);
+    digitalWrite(Trig_Pin2, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(Trig_Pin2, LOW);
+    pulseDuration2 = pulseIn(Echo_Pin2, HIGH);
+    distance2 = pulseDuration2 / 58;
+
+    // Obstacle Avoidance Logic
+    if (distance1 < 40 && distance2 < 30 || distance1 >= 799)
+    {
+        bw_Max_V(250);
+        turn_L(400);
+        fw_Max_V();
+    }
+    else if (distance1 < 40)
+    {
+        bw_Max_V(250);
+        turn_R(250);
+        fw_Max_V();
+    }
+    else
+    {
+        if(carRunning)
+          fw_Max_V();
+        else
+          stop(250);
+    }
+
+
+    // Display sensor readings on serial monitor
+    Serial.print("Distance 1 = ");
+    Serial.print(distance1);
+    Serial.print(" cm\t");
+    Serial.print("Distance 2 = ");
+    Serial.print(distance2);
+    Serial.println(" cm");
+    delay(200);
+
+  double currentMillis = millis();
+
+
+    if (!digitalRead(Hit_bPin)) {
+        if (currentMillis - lastHitB >= hitDelay) {
+            counterB++;
+            lastHitB = currentMillis;
+            //INSERT FUNCTION 1
+            Accel(hitDelay);
+             counterB--;
+            Serial.print("Target B hit! Count: ");
+            Serial.println(counterB);
+        }
+    }
+
+     if (!digitalRead(Hit_aPin))
+    { // Target A hit
+        if (currentMillis - lastHitA >= hitDelay)
+        {
+          counterA++;
+          lastHitA = currentMillis;
+          // INSERT FUNCTION 2
+          turn_L(5000);
+          counterA--;
+          Serial.print("Target A hit! Count: ");
+          Serial.println(counterA);
+        }
+    }
+
+    // ThingSpeak command read logic (rate controlled)
+    if (millis() - lastReadTime >= readInterval)
+    {
+        thingspeakReadCommand();
+        lastReadTime = millis();
+
+          if (command == "start")
+          {
+            carRunning = true;
+          }
+          else if(command == "stop")
+          {
+            carRunning = false;
+          }
+      }
+    }
+
+ //---------------------------------------
+// Pin Change Interrupt Service Routine (ISR) for Hit A
+ISR(PCINT2_vect) {
+    // Check to confirm it was the intended pin that fired the interrupt
+    if (!digitalRead(Hit_aPin))
+    {
+         counterA++; //Increment counterA
+    }
+}
+
+
+
+//---------------------------------------------------
+// Motor Functions (No change needed from original code)
+void fw_Max_V() {
+  analogWrite(L_motor_fw_pin, 180);
+  analogWrite(R_motor_fw_pin, 160);
+  digitalWrite(L_motor_bw_pin, LOW);
+  digitalWrite(R_motor_bw_pin, LOW);
+}
+
+void bw_Max_V(int delay_time) {
+  digitalWrite(L_motor_fw_pin, LOW);
+  digitalWrite(R_motor_fw_pin, LOW);
+  digitalWrite(L_motor_bw_pin, HIGH);
+  digitalWrite(R_motor_bw_pin, HIGH);
+  delay(delay_time);
+}
+
+void stop(int delay_time) {
+  digitalWrite(L_motor_fw_pin, LOW);
+  digitalWrite(R_motor_fw_pin, LOW);
+  digitalWrite(L_motor_bw_pin, LOW);
+  digitalWrite(R_motor_bw_pin, LOW);
+  delay(delay_time);
+}
+
+void turn_L(int delay_time) {
+  digitalWrite(L_motor_fw_pin, LOW);
+  analogWrite(R_motor_fw_pin, 160);
+  analogWrite(L_motor_bw_pin, 120);
+  digitalWrite(R_motor_bw_pin, LOW);
+  delay(delay_time);
+}
+
+void turn_R(int delay_time) {
+  analogWrite(L_motor_fw_pin, 160);
+  digitalWrite(R_motor_fw_pin, LOW);
+  digitalWrite(L_motor_bw_pin, LOW);
+  analogWrite(R_motor_bw_pin,120);
+  delay(delay_time);
+}
+
+void Accel(int delay_time) {
+  for (int i = 0; i <= 255; i++) {
+    analogWrite(L_motor_fw_pin, i);
+    analogWrite(R_motor_fw_pin, i);
+    digitalWrite(L_motor_bw_pin, LOW);
+    digitalWrite(R_motor_bw_pin, LOW);
+    delay(delay_time);
+  }
+}
+
+void Deccel(int delay_time) {
+  for (int i = 0; i <= 255; i++) {
+    digitalWrite(L_motor_fw_pin, LOW);
+    digitalWrite(R_motor_fw_pin, LOW);
+    analogWrite(L_motor_bw_pin, i);
+    analogWrite(R_motor_bw_pin, i);
+    delay(delay_time);
+  }
+}
+
+//-------------------------------------
+// ESP-01 Communication Functions
+void espSendCmd(const char *cmd) {
+    Serial.print("Sending command to ESP8266: ");
+    Serial.println(cmd);
+    espSerial.print(cmd);
+    espSerial.print("\r\n"); // AT commands require CR+LF
+}
+
+String espReadResponse(int timeout) {
+    String response = "";
+    long startTime = millis();
+    while (millis() - startTime < timeout) {
+        if (espSerial.available()) {
+            char c = espSerial.read();
+            response += c;
+            if (c == '\n') { // Response ends with \n
+                break;
+            }
+        }
+    }
+    Serial.print("ESP8266 Response: ");
+    Serial.println(response);
+    return response;
+}
+
+//----------------------------
+// ThingSpeak Command Fetch Function
+void thingspeakReadCommand() {
+    String url = "GET /channels/" + String(thingspeakChannelID) + "/feeds/last.json?api_key=" + String(thingspeakAPIKey) + " HTTP/1.1\r\nHost: api.thingspeak.com\r\nConnection: close\r\n\r\n";
+
+  // Send HTTP request to ThingSpeak
+  espSendCmd("AT+CIPMUX=0"); // Single connection
+  espReadResponse(2000);
+  String cipStart = "AT+CIPSTART=\"TCP\",\"api.thingspeak.com\",80";
+  espSendCmd(cipStart.c_str());
+    if (espReadResponse(5000).indexOf("OK") == -1) {
+        Serial.println("Error starting TCP connection");
+        return;
+    }
+   String sendCmd="AT+CIPSEND=" + String(url.length());
+    espSendCmd(sendCmd.c_str());
+    if (espReadResponse(1000).indexOf(">") == -1) {
+        Serial.println("Error sending data command");
+        return;
+    }
+    espSerial.print(url);
+    String response = espReadResponse(5000);
+     espSendCmd("AT+CIPCLOSE");
+     espReadResponse(2000);
+
+     int start = response.indexOf("\"field1\":\"");
+     if (start != -1)
+        {
+        start += 10;
+        int end = response.indexOf("\"", start);
+        if (end != -1)
+          {
+             command = response.substring(start, end);
+          } else
+          {
+          Serial.println("Error: could not parse command value from JSON response");
+          command = "stop";
+          }
+        }
+     else
+       {
+        Serial.println("Error: Could not find field1 in JSON response");
+        command = "stop";
+       }
+}
