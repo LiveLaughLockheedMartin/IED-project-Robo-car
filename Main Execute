@@ -3,8 +3,8 @@
 #define Trig_Pin2 8
 #define Echo_Pin2 7 
 
-#define L_motor_fw_pin 3 //Motor driver pin
-#define L_motor_bw_pin 5
+#define L_motor_fw_pin 5 //Motor driver pin
+#define L_motor_bw_pin 3
 #define R_motor_fw_pin 6
 #define R_motor_bw_pin 9
 
@@ -18,8 +18,8 @@ const long threshold=5;*/ //test and adjust
 //put in analog V_control if uneven rpm
 void fw_Max_V() //spins forward
 {
-  analogWrite(L_motor_fw_pin,180);
-  analogWrite(R_motor_fw_pin,160); //Set forward pin high
+  analogWrite(L_motor_fw_pin,115);
+  analogWrite(R_motor_fw_pin,150); //Set forward pin high
   digitalWrite(L_motor_bw_pin,LOW);
   digitalWrite(R_motor_bw_pin,LOW); //Set backward pin low
 }
@@ -166,8 +166,8 @@ void loop()
   delayMicroseconds(10);
   digitalWrite(Trig_Pin2, LOW);
 
-
-  pulseDuration2 = pulseIn(Echo_Pin2, HIGH);
+  fw_Max_V();
+  /*pulseDuration2 = pulseIn(Echo_Pin2, HIGH);
   distance2 = pulseDuration2 / 58;  //  Convert to cm
   
   if (distance1<40 && distance2<30 || distance1>=799) // Obstacle detection 11 o'clock to 2 o'clock
@@ -185,7 +185,7 @@ void loop()
   else
   {
     fw_Max_V();
-  }
+  }*/
   
 
   // Display the obstacle distance in serial monitor 
