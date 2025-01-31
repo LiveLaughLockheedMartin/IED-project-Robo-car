@@ -3,8 +3,8 @@
 #define Trig_Pin2 8
 #define Echo_Pin2 7 
 
-#define L_motor_fw_pin 3 //Motor driver pin
-#define L_motor_bw_pin 5
+#define L_motor_fw_pin 5 //Motor driver pin
+#define L_motor_bw_pin 3
 #define R_motor_fw_pin 6
 #define R_motor_bw_pin 9
 
@@ -19,7 +19,7 @@ const long threshold=5;*/ //test and adjust
 void fw_Max_V() //spins forward
 {
   analogWrite(L_motor_fw_pin,180);
-  analogWrite(R_motor_fw_pin,160); //Set forward pin high
+  analogWrite(R_motor_fw_pin,150); //Set forward pin high
   digitalWrite(L_motor_bw_pin,LOW);
   digitalWrite(R_motor_bw_pin,LOW); //Set backward pin low
 }
