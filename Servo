@@ -1,16 +1,126 @@
 #include <Servo.h>
-
 Servo myServo;  // Create a servo object
+#define Trig_Pin1 11 // Left ultrasonic sensor (10 o'clock)
+#define Echo_Pin1 10
+#define Trig_Pin2 8  // Right ultrasonic sensor (2 o'clock)
+#define Echo_Pin2 7 
+
+#define L_motor_fw_pin 5 // Left motor forward
+#define L_motor_bw_pin 3 // Left motor backward
+#define R_motor_fw_pin 6 // Right motor forward
+#define R_motor_bw_pin 9 // Right motor backward
+
+// Function to move forward
+void fw_Max_V() 
+{
+  analogWrite(L_motor_fw_pin, 104);
+  analogWrite(R_motor_fw_pin, 140); 
+  digitalWrite(L_motor_bw_pin, LOW);
+  digitalWrite(R_motor_bw_pin, LOW);
+}
+
+// Function to move backward
+void bw_Max_V(int delay_time) 
+{
+  digitalWrite(L_motor_fw_pin, LOW);
+  digitalWrite(R_motor_fw_pin, LOW);
+  digitalWrite(L_motor_bw_pin, HIGH);
+  digitalWrite(R_motor_bw_pin, HIGH);
+  delay(delay_time);
+}
+
+// Function to stop the robot
+void stop(int delay_time) 
+{
+  digitalWrite(L_motor_fw_pin, LOW);
+  digitalWrite(R_motor_fw_pin, LOW);
+  digitalWrite(L_motor_bw_pin, LOW);
+  digitalWrite(R_motor_bw_pin, LOW);
+  delay(delay_time);
+}
+
+// Function to turn left
+void turn_L(int delay_time) 
+{
+  digitalWrite(L_motor_fw_pin, LOW);
+  analogWrite(R_motor_fw_pin, 160);
+  analogWrite(L_motor_bw_pin, 120);
+  digitalWrite(R_motor_bw_pin, LOW);
+  delay(delay_time);
+}
+
+// Function to turn right
+void turn_R(int delay_time) 
+{
+  analogWrite(L_motor_fw_pin, 160);
+  digitalWrite(R_motor_fw_pin, LOW);
+  digitalWrite(L_motor_bw_pin, LOW);
+  analogWrite(R_motor_bw_pin, 120);
+  delay(delay_time);
+}
+
+// Function to read ultrasonic sensor distance
+int getDistance(int trigPin, int echoPin) 
+{
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  long duration = pulseIn(echoPin, HIGH);
+  return duration / 58;  // Convert to cm
+}
 
 void setup() 
 {
-    myServo.attach(2);  // Attach the servo to pin D2
+  Serial.begin(9600);
+  myServo.attach(2);
+  pinMode(Trig_Pin1, OUTPUT);
+  pinMode(Echo_Pin1, INPUT);
+  pinMode(Trig_Pin2, OUTPUT);
+  pinMode(Echo_Pin2, INPUT);
+  pinMode(L_motor_fw_pin, OUTPUT);
+  pinMode(R_motor_fw_pin, OUTPUT);
+  pinMode(L_motor_bw_pin, OUTPUT);
+  pinMode(R_motor_bw_pin, OUTPUT);
 }
 
-void loop()
+void loop() 
 {
-    myServo.write(20);  //close position
-    delay(1000);     
-    myServo.write(70);  // open position
+  int distance1 = getDistance(Trig_Pin1, Echo_Pin1); // Left sensor
+  int distance2 = getDistance(Trig_Pin2, Echo_Pin2); // Right sensor
+
+  Serial.print("Left Sensor: ");
+  Serial.print(distance1);
+  Serial.print(" cm, Right Sensor: ");
+  Serial.print(distance2);
+  Serial.println(" cm");
+  myServo.write(70); //open position
+  if (distance1 < 30 && distance2 < 30) 
+  {  // Both sensors detect obstacles
+    bw_Max_V(1000);
+    //myServo.write(70);  //open position    
+    myServo.write(20);  // close position
     delay(1000);        // Wait for a second
+    turn_L(1000); // Turn left for a longer time to make a proper turn
+    fw_Max_V();
+  } 
+  else if (distance1 < 30) 
+  {  // Left sensor detects an obstacle
+    bw_Max_V(200);
+    turn_R(300);  // Turn right to avoid the left-side obstacle
+    fw_Max_V();
+  } 
+  else if (distance2 < 30)
+  {  // Right sensor detects an obstacle
+    bw_Max_V(200);
+    turn_L(300);  // Turn left to avoid the right-side obstacle
+    fw_Max_V();
+  } 
+  else 
+  {  // No obstacle, move forward
+    fw_Max_V();
+  }
+
+  delay(200); // Reduce the frequency of sensor checking to avoid false readings
 }
