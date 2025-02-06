@@ -1,0 +1,99 @@
+/*Testing_IR1.ino
+Analog IR Sensor. This program is used to read and adjust IR sensor signal values*/
+#define IR_SENSOR_RIGHT A1 // Adjusted IR sensor pins
+#define IR_SENSOR_LEFT A0
+#define MOTOR_SPEED_LEFT 20
+#define MOTOR_SPEED_RIGHT 30
+
+// Right motor
+#define R_motor_fw_pin 6
+#define R_motor_bw_pin 9
+
+// Left motor
+#define L_motor_fw_pin 3
+#define L_motor_bw_pin 5
+
+int IR1_Val = 0;
+int IR2_Val = 0;      // to store IR sensor 2 signal value
+
+void setup() 
+{
+  Serial.begin(9600);   // Setup Serial Communication.               
+  Serial.print("Analog IR Sensor 1.\n");  
+  pinMode(IR_SENSOR_RIGHT, INPUT);
+  pinMode(IR_SENSOR_LEFT, INPUT);
+  
+  pinMode(R_motor_fw_pin, OUTPUT);
+  pinMode(R_motor_bw_pin, OUTPUT);
+  pinMode(L_motor_fw_pin, OUTPUT);
+  pinMode(L_motor_bw_pin, OUTPUT);
+
+  rotateMotor(0, 0);
+}
+
+void loop()
+{
+        int rightIRSensorValue = digitalRead(IR_SENSOR_RIGHT); // Reading and storing IR sensor 1 signal value
+        int leftIRSensorValue = digitalRead(IR_SENSOR_LEFT);
+        /*Serial.println(digitalRead(rightIRSensorValue)); // Waiting for a while.
+        Serial.println(digitalRead(leftIRSensorValue));*/
+
+        Serial.print("Right IR: ");
+        Serial.print(rightIRSensorValue);
+        Serial.print(" | Left IR: ");
+        Serial.println(leftIRSensorValue);
+
+        if (rightIRSensorValue == HIGH && leftIRSensorValue == HIGH) 
+        {
+          rotateMotor(-MOTOR_SPEED_RIGHT, -MOTOR_SPEED_LEFT); // Move forward
+        } 
+        else if (rightIRSensorValue == HIGH && leftIRSensorValue == LOW) 
+        {
+          rotateMotor(-MOTOR_SPEED_RIGHT, MOTOR_SPEED_LEFT); // Turn right
+        } 
+        else if (rightIRSensorValue == LOW && leftIRSensorValue == HIGH) 
+        {
+          rotateMotor(MOTOR_SPEED_RIGHT, -MOTOR_SPEED_LEFT); // Turn left
+        }
+         else 
+        {
+          rotateMotor(0, 0); // Stop
+        }
+}
+
+void rotateMotor(int rightMotorSpeed, int leftMotorSpeed) 
+{
+  if (rightMotorSpeed < 0) 
+  {
+    digitalWrite(R_motor_fw_pin, LOW);
+    digitalWrite(R_motor_bw_pin, HIGH);
+  } 
+  else if (rightMotorSpeed > 0) 
+  {
+    digitalWrite(R_motor_fw_pin, HIGH);
+    digitalWrite(R_motor_bw_pin, LOW);
+  }
+  else 
+  {
+    digitalWrite(R_motor_fw_pin, LOW);
+    digitalWrite(R_motor_bw_pin, LOW);
+  }
+
+  if (leftMotorSpeed < 0) 
+  {
+    digitalWrite(L_motor_fw_pin, LOW);
+    digitalWrite(L_motor_bw_pin, HIGH);
+  } 
+  else if (leftMotorSpeed > 0) 
+  {
+    digitalWrite(L_motor_fw_pin, HIGH);
+    digitalWrite(L_motor_bw_pin, LOW);
+  } 
+  else 
+  {
+    digitalWrite(L_motor_fw_pin, LOW);
+    digitalWrite(L_motor_bw_pin, LOW);
+  }
+}
+
+  /*the IR signal value should be close to 500 for black surface (logic 1) and around 16 for white surface (logic 0) */
