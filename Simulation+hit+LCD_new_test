@@ -1,0 +1,259 @@
+#include <Servo.h>
+Servo myServo;  // Create a servo object
+
+#include <avr/interrupt.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+#define Trig_Pin1 11 // Left ultrasonic sensor (10 o'clock)
+#define Echo_Pin1 10
+#define Trig_Pin2 8  // Right ultrasonic sensor (2 o'clock)
+#define Echo_Pin2 7 
+
+#define L_motor_fw_pin 5 // Left motor forward
+#define L_motor_bw_pin 3 // Left motor backward
+#define R_motor_fw_pin 6 // Right motor forward
+#define R_motor_bw_pin 9 // Right motor backward
+
+#define Hit_aPin 4 //define digital I/O pin D4 for Hit A
+#define Hit_bPin 2 //define digital I/O pin D2 for Hit B
+int counterA = 0; //number of hits received from Target board A
+int counterB = 0; //number of hits received from Target board 
+double lastHitA = 0; // Timestamp of last hit on Target A
+double lastHitB = 0; // Timestamp of last hit on Target B
+const double hitDelay = 2000;  // Delay 2 sec
+
+
+LiquidCrystal_I2C lcd(0x27,16,2);
+// addr,en,rw,rs,d4,d5,d6,d7,bl,blpol
+// addr can be 0x3F or 0x27
+
+
+
+/*#define define Max_Distance 300
+const long threshold=5;*/ //test and adjust
+
+//reverse pins if negative rpm
+//put in analog V_control if uneven rpm
+
+// Function to move forward
+void fw_Max_V(int delay_time) 
+{
+  analogWrite(L_motor_fw_pin, 130);
+  analogWrite(R_motor_fw_pin, 120); 
+  digitalWrite(L_motor_bw_pin, LOW);
+  digitalWrite(R_motor_bw_pin, LOW);
+  delay(delay_time);
+}
+
+// Function to move backward
+void bw_Max_V(int delay_time) 
+{
+  digitalWrite(L_motor_fw_pin, LOW);
+  digitalWrite(R_motor_fw_pin, LOW);
+  analogWrite(L_motor_bw_pin, 120);
+  analogWrite(R_motor_bw_pin, 120);
+  delay(delay_time);
+}
+
+// Function to stop the robot
+void stop(int delay_time) 
+{
+  digitalWrite(L_motor_fw_pin, LOW);
+  digitalWrite(R_motor_fw_pin, LOW);
+  digitalWrite(L_motor_bw_pin, LOW);
+  digitalWrite(R_motor_bw_pin, LOW);
+  delay(delay_time);
+}
+
+// Function to turn left
+void turn_L(int delay_time) 
+{
+  analogWrite(L_motor_fw_pin, 120);
+  analogWrite(R_motor_fw_pin, LOW);
+  analogWrite(L_motor_bw_pin, LOW);
+  digitalWrite(R_motor_bw_pin, 110);
+  delay(delay_time);
+}
+
+// Function to turn right
+void turn_R(int delay_time) 
+{
+  analogWrite(L_motor_fw_pin, 160);
+  digitalWrite(R_motor_fw_pin, LOW);
+  digitalWrite(L_motor_bw_pin, LOW);
+  analogWrite(R_motor_bw_pin, 120);
+  delay(delay_time);
+}
+
+// Function to read ultrasonic sensor distance
+int getDistance(int trigPin, int echoPin) 
+{
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  long duration = pulseIn(echoPin, HIGH);
+  return duration / 58;  // Convert to cm
+}
+
+void setup() 
+{
+  Serial.begin(9600);
+  myServo.attach(2);
+  pinMode(Trig_Pin1, OUTPUT);
+  pinMode(Echo_Pin1, INPUT);
+  pinMode(Trig_Pin2, OUTPUT);
+  pinMode(Echo_Pin2, INPUT);
+  pinMode(L_motor_fw_pin, OUTPUT);
+  pinMode(R_motor_fw_pin, OUTPUT);
+  pinMode(L_motor_bw_pin, OUTPUT);
+  pinMode(R_motor_bw_pin, OUTPUT);
+
+  pinMode(Hit_aPin, INPUT_PULLUP);  // Use INPUT_PULLUP to avoid needing external resistors
+  pinMode(Hit_bPin, INPUT_PULLUP);
+  
+  pinMode(4, INPUT_PULLUP);
+  PCICR |= B00000100; // Enable interrupts on PD port
+  PCMSK2 |= B00010000; // Trigger interrupts on pins D4 (Hit a)
+  lcd.init();
+  lcd.begin(16, 2);
+  lcd.backlight();
+  lcd.clear();
+  interrupts();
+}
+
+void loop() 
+{
+  int distance1 = getDistance(Trig_Pin1, Echo_Pin1); // Left sensor
+  int distance2 = getDistance(Trig_Pin2, Echo_Pin2); // Right sensor
+
+  Serial.print("Left Sensor: ");
+  Serial.print(distance1);
+  Serial.print(" cm, Right Sensor: ");
+  Serial.print(distance2);
+  Serial.println(" cm");
+
+ myServo.write(70); //open position
+  fw_Max_V(1500);
+  stop(1000);
+  myServo.write(20);
+  stop(1000);
+  turn_L(172); //>180 for claw
+  stop(1000);
+  fw_Max_V(1000);
+  stop(1000);
+  myServo.write(70);
+  stop(1000);
+  bw_Max_V(1000); 
+  stop(1000);
+  turn_L(172);
+  stop(1000);
+  fw_Max_V(1000);
+  stop(1000);
+
+  // Display the obstacle distance in serial monitor 
+  Serial.print("Distance = ");
+  Serial.print(distance1);
+  Serial.println(" cm");
+  delay(500);
+
+   double currentMillis = millis(); // uhh this like calculates the time and equating it allows it to reset constantly 
+
+ if (!digitalRead(Hit_bPin)) 
+ { 
+  
+      counterB++;
+      // Record the time of the hit
+      //INSERT FUNCTION 1
+      Serial.println(counterB);  //uses serial monitor 
+      fw_Max_V(1000); 
+      stop(5000);
+      counterB--;
+      Serial.print("Target B hit! Count: "); 
+ }
+  if (!digitalRead(Hit_aPin)) 
+ { // Target A hit
+      counterA++;
+       // Record the time of the hit
+      // INSERT FUNCTION 2
+      stop(1000); 
+      myServo.write(20);
+      stop(1000); 
+      turn_L(5000); //360 turn
+      fw_Max_V(2000); 
+      stop(1000);
+      myServo.write(70);
+      stop(1000);
+      bw_Max_V(1000); 
+      turn_L(5000);
+      Serial.print("Target A hit! Count: ");
+      Serial.println(counterA);
+ }
+    lcd.setCursor(0, 0);
+    lcd.print("Mode Selection?");
+    if(Hit_bPin==0)
+    {
+      lcd.setCursor(0, 1);
+      lcd.print("Accelerating");
+      delay(5000);
+    }
+
+    if(Hit_aPin==0)
+    {
+      lcd.setCursor(0, 1);
+      lcd.print("Turning");
+      delay(5000);
+    }
+  /*turn_L(1000);
+
+  fw_Max_V(500);
+  stop(1000);
+  myServo.write(20);
+  stop(1000);
+  turn_L(500);
+  fw_Max_V(1000);
+  myServo.write(70);
+  bw_Max_V(1000);
+  turn_L(1000);
+
+  fw_Max_V(500);
+  stop(1000);
+  myServo.write(20);
+  stop(1000);
+  fw_Max_V(1000);
+  myServo.write(70);
+  bw_Max_V(1000);
+  turn_L(1000);*/
+
+
+  /*if (distance1 < 30 && distance2 < 30) 
+  {  // Both sensors detect obstacles
+    bw_Max_V(1000);
+    //myServo.write(70);  //open position    
+    myServo.write(20);  // close position
+    delay(1000);        // Wait for a second
+    turn_L(1000); // Turn left for a longer time to make a proper turn
+    fw_Max_V();
+  } 
+  else if (distance1 < 30) 
+  {  // Left sensor detects an obstacle
+    bw_Max_V(200);
+    turn_R(300);  // Turn right to avoid the left-side obstacle
+    fw_Max_V();
+  } 
+  else if (distance2 < 30)
+  {  // Right sensor detects an obstacle
+    bw_Max_V(200);
+    turn_L(300);  // Turn left to avoid the right-side obstacle
+    fw_Max_V();
+  } 
+  else 
+  {  // No obstacle, move forward
+    fw_Max_V();
+  }*/
+
+
+  delay(200); // Reduce the frequency of sensor checking to avoid false readings
+}
