@@ -1,0 +1,225 @@
+//Include libraries
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <Servo.h>
+#include <avr/interrupt.h>
+
+Servo myServo;  // Create a servo object
+
+// Left ultrasonic sensor
+#define Trig_Pin1 11  
+#define Echo_Pin1 10
+
+// Right ultrasonic sensor
+#define Trig_Pin2 8   
+#define Echo_Pin2 7
+
+//Motor pins
+#define L_motor_fw_pin 5
+#define L_motor_bw_pin 3
+#define R_motor_fw_pin 6
+#define R_motor_bw_pin 9
+
+#define Hit_aPin 4  // Target A hit sensor
+#define Hit_bPin 2  // Target B hit sensor
+
+#define IR_SENSOR A0
+int IR_Val = 0; //initial value
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);  // Initialize LCD with I2C address
+
+
+volatile bool hitA_flag = false;
+volatile bool hitB_flag = false;
+
+unsigned long actionStartTime = 0;  // Store the time when an action starts
+const unsigned long actionDuration = 3000;  // Duration for action (3 seconds)
+
+void setup() 
+{
+    Serial.begin(9600);  // Start the serial monitor for debugging
+    myServo.attach(A1);  // Attach servo to pin A1
+    lcd.init();  // Initialize the LCD
+    lcd.backlight();  // Turn on the backlight
+    lcd.clear();  // Clear any previous display
+
+    //Set pin mode
+    pinMode(Trig_Pin1, OUTPUT);  
+    pinMode(Echo_Pin1, INPUT);   
+    pinMode(Trig_Pin2, OUTPUT);  
+    pinMode(Echo_Pin2, INPUT);   
+
+    pinMode(L_motor_fw_pin, OUTPUT);
+    pinMode(R_motor_fw_pin, OUTPUT);
+    pinMode(L_motor_bw_pin, OUTPUT);
+    pinMode(R_motor_bw_pin, OUTPUT);
+
+    pinMode(Hit_aPin, INPUT_PULLUP);
+    pinMode(Hit_bPin, INPUT_PULLUP);
+
+    pinMode(IR_SENSOR, INPUT);
+
+    PCICR |= (1 << PCIE2);  // Enable pin change interrupt for Port D
+    PCMSK2 |= (1 << PCINT18) | (1 << PCINT20);  // Enable interrupts for pins 2 and 4
+    interrupts();
+}
+
+int getDistance(int trigPin, int echoPin) 
+{
+    digitalWrite(trigPin, LOW);
+    delayMicroseconds(2);
+    digitalWrite(trigPin, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(trigPin, LOW);
+    long duration = pulseIn(echoPin, HIGH);
+    return duration / 58;  // Convert to cm
+}
+
+void fw_Max_V(int delay_time) 
+{
+    analogWrite(L_motor_fw_pin, 170);  // High speed forward
+    analogWrite(R_motor_fw_pin, 180);
+    digitalWrite(L_motor_bw_pin, LOW);
+    digitalWrite(R_motor_bw_pin, LOW);
+    actionStartTime = millis();  // Mark the start time
+    while (millis() - actionStartTime < delay_time) 
+    {
+        // Keep moving forward until the action duration passes
+        // Stop after 3 seconds
+    }
+    stop(0); 
+}
+
+void bw_Max_V(int delay_time) 
+{
+  digitalWrite(L_motor_fw_pin, LOW);
+  digitalWrite(R_motor_fw_pin, LOW);
+  analogWrite(L_motor_bw_pin, 170);
+  analogWrite(R_motor_bw_pin, 180);
+  delay(delay_time);
+}
+
+// Function to stop the robot
+void stop(int delay_time) 
+{
+  digitalWrite(L_motor_fw_pin, LOW);
+  digitalWrite(R_motor_fw_pin, LOW);
+  digitalWrite(L_motor_bw_pin, LOW);
+  digitalWrite(R_motor_bw_pin, LOW);
+  delay(delay_time);
+}
+
+
+void turn_L(int delay_time) 
+{
+    analogWrite(L_motor_fw_pin, 120);
+    analogWrite(R_motor_fw_pin, LOW);
+    analogWrite(L_motor_bw_pin, LOW);
+    analogWrite(R_motor_bw_pin, 110);
+    actionStartTime = millis();  // Mark the start time
+    while (millis() - actionStartTime < delay_time) 
+    {
+        // Keep turning left until the action duration passes
+    }
+    stop(0);  // Stop after 3 seconds
+}
+
+
+void loop() 
+{
+    myServo.write(70); //Open claw
+
+    //Read distance with ultrasonic at 10 o' clock and 2 o' clock
+    int distance1 = getDistance(Trig_Pin1, Echo_Pin1); 
+    int distance2 = getDistance(Trig_Pin2, Echo_Pin2);
+
+    int IRSensorValue = digitalRead(IR_SENSOR); //Read distance with IR at 12 o' clock
+
+    Serial.print("IR: ");
+    Serial.println(IRSensorValue);
+
+    // Display the ultrasonic sensor values on the LCD
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Right Sensor: ");
+    lcd.print(distance1);  
+    lcd.print(" cm");
+
+    lcd.setCursor(0, 1);
+    lcd.print("Left Sensor: ");
+    lcd.print(distance2);  
+    lcd.print(" cm");
+
+    
+    if (RrSensorValue == LOW)   // IR sensor detects an obstacle
+    {  
+        stopBot(1000);
+        Serial.println("Obstacle detected at 12 o'clock! Attempting to pick up...");
+        clawServo.write(20);  // Close claw
+        delay(1000);
+        bw_Max_V(1000);  // Move back after picking up
+        turn_L(500); //Adjust to make the car go 180
+        fw_Max_V(1000);
+    }
+    else if (distance1 < 30 && distance2 < 30) 
+    {  // Both side sensors detect obstacles
+        bw_Max_V(500);
+        turn_L(500); //Adjust to make the car go 180
+        fw_Max_V(1000);
+    } 
+    else if (distance1 < 30) 
+    {  // Left sensor detects obstacle
+        bw_Max_V(200);
+        turn_R(300); //Adjust to turn right
+        fw_Max_V(1000);
+    } 
+    else if (distance2 < 30) 
+    {  // Right sensor detects obstacle
+        bw_Max_V(200);
+        turn_L(300); //Adjust to turn left
+        fw_Max_V(1000);
+    } 
+    else 
+    {  // No obstacles
+        fw_Max_V();
+    }
+
+    delay(500);  
+
+    // Check if a hit has been detected and handle the actions
+    if (hitA_flag) 
+    {
+        Serial.println("Target A hit! Accelerating...");
+        fw_Max_V(1000);  // Move forward fast for 3 seconds
+        hitA_flag = false;
+        delay(5000);
+    }
+    
+    if (hitB_flag) 
+    {
+        Serial.println("Target B hit! Turning left...");
+        myServo.write(20);
+        stop(1000);
+        turn_L(700);  // Turn left for 3 seconds
+        stop(1000);
+        fw_Max_V(1000);
+        stop(1000);
+        myServo.write(70);
+        stop(1000);
+        bw_Max_V(1000);
+        hitB_flag = false;
+        delay(5000);
+    }
+}
+
+ISR(PCINT2_vect) 
+{
+    if (!digitalRead(Hit_aPin)) 
+    {
+        hitA_flag = true;  // Set flag for target A
+    }
+    if (!digitalRead(Hit_bPin)) 
+    {
+        hitB_flag = true;  // Set flag for target B
+    }
+}
