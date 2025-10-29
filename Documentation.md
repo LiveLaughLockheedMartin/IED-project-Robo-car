@@ -1,13 +1,13 @@
 # IED-project-Robo-car
 
-# 🤖 Self-Driving Trash-Picking Robot Car
+#  Self-Driving Trash-Picking Robot Car
 
 An autonomous robot car designed to detect, approach, and pick up obstacles using ultrasonic and IR sensors.  
 Equipped with a servo-powered claw, the bot identifies objects, avoids collisions, and performs automated trash collection tasks.
 
 ---
 
-## 🚀 Project Overview
+##  Project Overview
 
 This robot car combines **ultrasonic distance sensing**, **IR color/object detection**, and **servo-based actuation** to navigate its environment autonomously.  
 It can detect nearby obstacles, determine their color (e.g., green or purple), and activate a claw mechanism to pick them up.
@@ -16,18 +16,18 @@ The system also supports **laser signal overrides**, allowing users to interrupt
 
 ---
 
-## 🧠 Features
+##  Features
 
-- 🔊 **Dual Ultrasonic Sensors** (at 10 o’clock and 2 o’clock) for obstacle detection  
-- 👁️ **IR Sensor** (at 12 o’clock) for color and object identification  
-- 🦾 **Servo-Controlled Claw** for picking up detected objects  
-- 🛞 **Bidirectional Motor Control** for movement and steering  
-- 🧩 **Laser Signal Interrupt System** to override current operations  
-- 🧱 **Modular Arduino C++ Codebase** for easy testing and expansion  
+-  **Dual Ultrasonic Sensors** (at 10 o’clock and 2 o’clock) for obstacle detection  
+-  **IR Sensor** (at 12 o’clock) for color and object identification  
+-  **Servo-Controlled Claw** for picking up detected objects  
+-  **Bidirectional Motor Control** for movement and steering  
+-  **Laser Signal Interrupt System** to override current operations  
+-  **Modular Arduino C++ Codebase** for easy testing and expansion  
 
 ---
 
-## ⚙️ Hardware Components
+##  Hardware Components
 
 | Component | Description |
 |------------|-------------|
@@ -43,7 +43,7 @@ The system also supports **laser signal overrides**, allowing users to interrupt
 ---
 
 
-## 💻 Code Structure
+##  Code Structure
 
 ### `autonomous_mode.ino`
 Handles:
@@ -60,7 +60,7 @@ Handles:
 
 ---
 
-## 🔬 Working Principle
+##  Working Principle
 
 1. The robot continuously reads distances from both ultrasonic sensors.  
 2. If an obstacle is detected within the threshold range (typically < 30 cm), the robot:
@@ -74,7 +74,7 @@ Handles:
 ---
 
 
-## 🧭 Future Improvements
+##  Future Improvements
 
 - Implement PID-based line following  
 - Add Wi-Fi remote control (via HC-05 / ESP8266)  
